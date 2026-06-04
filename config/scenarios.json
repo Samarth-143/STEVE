@@ -1,0 +1,26 @@
+[
+    {
+        "id": 1,
+        "title": "<MAIN SCENARIO #1 - PROOF OF VALUE>",
+        "lines": [
+            "CATEGORY: MAIN",
+            "DIFFICULTY: F",
+            "CLEAR CONDITION: KILL ONE OR MORE LIVING THINGS",
+            "TIME LIMIT: 30 MINUTES",
+            "REWARDS: 300 COINS",
+            "PENALTY FOR FAILURE: DEATH"
+        ]
+    },
+    {
+        "id": 2,
+        "title": "<SECONDARY SCENARIO - DEMO>",
+        "lines": [
+            "CATEGORY: SIDE",
+            "DIFFICULTY: E",
+            "CLEAR CONDITION: COLLECT 10 ITEMS",
+            "TIME LIMIT: 15 MINUTES",
+            "REWARDS: 50 COINS",
+            "PENALTY FOR FAILURE: NONE"
+        ]
+    }
+]
