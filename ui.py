@@ -38,9 +38,8 @@ BASE_DIR   = _base_dir()
 CONFIG_DIR = BASE_DIR / "config"
 API_FILE   = CONFIG_DIR / "api_keys.json"
 
-_DEFAULT_W, _DEFAULT_H = 980, 700
-_MIN_W,     _MIN_H     = 820, 580
-_LEFT_W  = 104
+_DEFAULT_W, _DEFAULT_H = 1060, 720
+_MIN_W,     _MIN_H     = 880, 600
 _RIGHT_W = 340
 
 _OS = platform.system()  # "Windows" | "Darwin" | "Linux"
@@ -567,7 +566,7 @@ class CircularStatWidget(QWidget):
         self._value = 0.0
         self._text = "--"
         self._extra_lines: list[str] = []
-        self.setFixedSize(68, 68)
+        self.setFixedSize(100, 100)
 
     def set_value(self, pct: float, text: str):
         self._value = max(0.0, min(100.0, pct))
@@ -721,18 +720,20 @@ class LogWidget(QTextEdit):
 class OrbitalClockWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(84, 84)
-        self.setMaximumSize(96, 96)
+        self.setMinimumSize(110, 110)
+        self.setMaximumSize(130, 130)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._time_text = "00:00:00"
+        self._day_text = ""
         self._date_text = ""
         self._second_pulse = 0.0
         self._pulse_tmr = QTimer(self)
         self._pulse_tmr.timeout.connect(self._pulse_step)
         self._pulse_tmr.start(33)
 
-    def set_time(self, time_text: str, date_text: str):
+    def set_time(self, time_text: str, day_text: str, date_text: str):
         self._time_text = time_text
+        self._day_text = day_text
         self._date_text = date_text
         self._second_pulse = 1.0
         self.update()
@@ -783,14 +784,19 @@ class OrbitalClockWidget(QWidget):
         p.setBrush(QBrush(qcol("#091f2a", 220)))
         p.drawEllipse(inner_rect)
 
-        # text
+        # text — line 1: time
         p.setPen(QPen(qcol(C.PRI, 245), 1))
-        p.setFont(QFont("Courier New", 12, QFont.Weight.Bold))
-        p.drawText(QRectF(0, cy - 18, W, 18), Qt.AlignmentFlag.AlignCenter, self._time_text)
+        p.setFont(QFont("Courier New", 14, QFont.Weight.Bold))
+        p.drawText(QRectF(0, cy - 24, W, 20), Qt.AlignmentFlag.AlignCenter, self._time_text)
 
+        # line 2: day
         p.setPen(QPen(qcol(C.TEXT_DIM, 220), 1))
-        p.setFont(QFont("Courier New", 6, QFont.Weight.Bold))
-        p.drawText(QRectF(0, cy + 2, W, 12), Qt.AlignmentFlag.AlignCenter, self._date_text)
+        p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        p.drawText(QRectF(0, cy + 0, W, 14), Qt.AlignmentFlag.AlignCenter, self._day_text)
+
+        # line 3: date
+        p.setFont(QFont("Courier New", 7))
+        p.drawText(QRectF(0, cy + 14, W, 12), Qt.AlignmentFlag.AlignCenter, self._date_text)
 
         # second pulse indicator
         p.setPen(Qt.PenStyle.NoPen)
@@ -1338,6 +1344,77 @@ class ScenarioCard(QWidget):
         self.done.emit(key, self._sel_os)
 
 
+class MicButton(QWidget):
+    clicked = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(60, 60)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._active = True
+        self._pulse = 0.0
+        self._tmr = QTimer(self)
+        self._tmr.timeout.connect(self._pulse_step)
+        self._tmr.start(50)
+
+    def is_active(self) -> bool:
+        return self._active
+
+    def set_active(self, v: bool):
+        self._active = v
+        self.update()
+
+    def _pulse_step(self):
+        if self._active:
+            self._pulse = min(1.0, self._pulse + 0.08)
+        else:
+            self._pulse = max(0.0, self._pulse - 0.08)
+        self.update()
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.MouseButton.LeftButton:
+            self._active = not self._active
+            self.clicked.emit()
+
+    def paintEvent(self, _):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        W, H = self.width(), self.height()
+        cx, cy = W / 2, H / 2
+        r = min(W, H) / 2 - 2
+
+        bg_col = C.GREEN if self._active else C.RED
+
+        # outer glow
+        glow_a = int(60 + 40 * self._pulse)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(qcol(bg_col, glow_a)))
+        p.drawEllipse(QPointF(cx, cy), r + 4, r + 4)
+
+        # main circle
+        p.setPen(QPen(qcol(bg_col, 200), 1.5))
+        p.setBrush(QBrush(qcol(C.PANEL2, 230)))
+        p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
+
+        # mic icon
+        p.setPen(QPen(qcol(bg_col), 2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        # mic body
+        mic_w, mic_h = 6, 10
+        p.drawRoundedRect(QRectF(cx - mic_w / 2, cy - mic_h / 2 - 2, mic_w, mic_h), 3, 3)
+        # mic arc
+        arc_r = 9
+        p.drawArc(QRectF(cx - arc_r, cy - arc_r + 1, arc_r * 2, arc_r * 2), 0, -180 * 16)
+        # mic stand
+        p.drawLine(QPointF(cx, cy + arc_r - 1), QPointF(cx, cy + arc_r + 4))
+        p.drawLine(QPointF(cx - 4, cy + arc_r + 4), QPointF(cx + 4, cy + arc_r + 4))
+
+        # mute slash
+        if not self._active:
+            p.setPen(QPen(qcol(C.RED), 2))
+            p.drawLine(QPointF(cx - r + 6, cy - r + 6), QPointF(cx + r - 6, cy + r - 6))
+
+
 class MainWindow(QMainWindow):
     _log_sig   = pyqtSignal(str)
     _state_sig = pyqtSignal(str)
@@ -1357,9 +1434,6 @@ class MainWindow(QMainWindow):
         self.on_text_command  = None
         self._muted           = False
         self._current_file: str | None = None
-        self._left_collapsed = False
-        self._right_collapsed = False
-        self._collapsed_width = 48
         self._animations_enabled = True
 
         central = QWidget()
@@ -1396,9 +1470,6 @@ class MainWindow(QMainWindow):
         body.setContentsMargins(0, 0, 0, 0)
         body.setSpacing(0)
 
-        self._left_panel = self._build_left_panel()
-        body.addWidget(self._left_panel, stretch=0)
-
         self.hud = HudCanvas(face_path)
         self.hud.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         body.addWidget(self.hud, stretch=5)
@@ -1408,19 +1479,26 @@ class MainWindow(QMainWindow):
         self._clock_widget.show()
         self._clock_widget.raise_()
 
-        self._hud_stats = [
-            self._stat_cpu,
-            self._stat_mem,
-            self._stat_net,
-            self._stat_gpu,
-            self._stat_tmp,
-            self._stat_up,
-        ]
+        self._mic_btn = MicButton(central)
+        self._mic_btn.clicked.connect(self._toggle_mute)
+        self._mic_btn.show()
+        self._mic_btn.raise_()
 
-        for widget in self._hud_stats:
-            widget.setParent(central)
-            widget.show()
-            widget.raise_()
+        self._stat_cpu = CircularStatWidget("CPU", C.PRI)
+        self._stat_mem = CircularStatWidget("RAM", C.ACC2)
+        self._stat_net = CircularStatWidget("NET", C.GREEN)
+        self._stat_gpu = CircularStatWidget("GPU", C.ACC)
+        self._stat_tmp = CircularStatWidget("TMP", "#ff6688")
+        self._stat_up  = CircularStatWidget("UP", C.GREEN)
+
+        self._hud_stats = [
+            self._stat_cpu, self._stat_mem, self._stat_net,
+            self._stat_gpu, self._stat_tmp, self._stat_up,
+        ]
+        for w in self._hud_stats:
+            w.setParent(central)
+            w.show()
+            w.raise_()
 
         self._right_panel = self._build_right_panel()
         body.addWidget(self._right_panel, stretch=0)
@@ -1433,7 +1511,6 @@ class MainWindow(QMainWindow):
         self._clock_tmr.start(1000)
         self._tick_clock()
 
-        # Metrik güncelleme timer'ı
         self._metric_tmr = QTimer(self)
         self._metric_tmr.timeout.connect(self._update_metrics)
         self._metric_tmr.start(2000)
@@ -1454,6 +1531,7 @@ class MainWindow(QMainWindow):
         # ensure HUD follows initial animations setting
         self.hud.set_animations_enabled(self._animations_enabled)
         self._position_clock_widget()
+        self._position_mic_button()
         self._position_hud_stats()
 
     def _toggle_fullscreen(self):
@@ -1473,66 +1551,66 @@ class MainWindow(QMainWindow):
                 ow, oh,
             )
         self._position_clock_widget()
+        self._position_mic_button()
         self._position_hud_stats()
 
     def _position_clock_widget(self):
         if not hasattr(self, "_clock_widget") or not self._clock_widget:
             return
         hud = self.hud
-        right_panel = getattr(self, "_right_panel", None)
         if not hud:
             return
-        cw = self.centralWidget()
-        if not cw:
-            return
-        # Place clock in the top-right of the HUD area, above the right panel content
-        pad = 15
         size = self._clock_widget.sizeHint()
-        if right_panel and right_panel.isVisible():
-            # Position just left of the right panel, at the top
-            x = right_panel.x() - size.width() - pad
-        else:
-            x = hud.x() + hud.width() - size.width() - pad
-        y = hud.y() + pad
-        self._clock_widget.setGeometry(x, y, size.width(), size.height())
+        hud_cx = hud.x() + hud.width() / 2
+        hud_cy = hud.y() + hud.height() / 2
+        hud_r = min(hud.width(), hud.height()) / 2
+        angle_rad = math.radians(25)
+        x = hud_cx + hud_r * 1.40 * math.cos(angle_rad) - size.width() / 2
+        y = hud_cy - hud_r * 1.40 * math.sin(angle_rad) - size.height() / 2
+        self._clock_widget.setGeometry(int(x), int(y), size.width(), size.height())
         self._clock_widget.show()
         self._clock_widget.raise_()
 
-        self._hud_stats = [
-            self._stat_cpu,
-            self._stat_mem,
-            self._stat_net,
-            self._stat_gpu,
-            self._stat_tmp,
-            self._stat_up,
-        ]
-
-        for widget in self._hud_stats:
-            widget.setParent(cw)
-            widget.show()
-            widget.raise_()
-
+    def _position_mic_button(self):
+        if not hasattr(self, "_mic_btn") or not self._mic_btn:
+            return
+        hud = self.hud
+        if not hud:
+            return
+        size = self._mic_btn.size()
+        hud_cx = hud.x() + hud.width() / 2
+        hud_cy = hud.y() + hud.height() / 2
+        hud_r = min(hud.width(), hud.height()) / 2
+        angle_rad = math.radians(-25)
+        x = hud_cx + hud_r * 1.50 * math.cos(angle_rad) - size.width() / 2
+        y = hud_cy - hud_r * 1.50 * math.sin(angle_rad) - size.height() / 2
+        self._mic_btn.move(int(x), int(y))
+        self._mic_btn.show()
+        self._mic_btn.raise_()
 
     def _position_hud_stats(self):
         if not hasattr(self, "_hud_stats"):
             return
-
-        cx = self.hud.x() + self.hud.width() / 2
-        cy = self.hud.y() + self.hud.height() / 2
-
-        radius = min(self.hud.width(), self.hud.height()) * 0.42
-        angles = [165, 145, 125, 105, 85, 65]
-
-        for widget, angle in zip(self._hud_stats, angles):
-            rad = math.radians(angle)
-
-            x = cx + radius * math.cos(rad) - widget.width() / 2
-            y = cy - radius * math.sin(rad) - widget.height() / 2
-
+        cw = self.centralWidget()
+        if not cw:
+            return
+        hud = self.hud
+        cx = hud.x() + hud.width() / 2
+        cy = hud.y() + hud.height() / 2
+        hud_r = min(hud.width(), hud.height()) / 2
+        stat_r = hud_r * 1.10
+        n = len(self._hud_stats)
+        arc_start = 225
+        arc_end = 135
+        step = (arc_start - arc_end) / max(n - 1, 1)
+        for i, widget in enumerate(self._hud_stats):
+            angle_deg = arc_start - i * step
+            angle_rad = math.radians(angle_deg)
+            x = cx + stat_r * math.cos(angle_rad) - widget.width() / 2
+            y = cy + stat_r * math.sin(angle_rad) - widget.height() / 2
             widget.move(int(x), int(y))
 
     def eventFilter(self, obj, event):
-
         # update background pixmap scaling when central widget resizes
         try:
             if obj is self.centralWidget() and event.type() == QEvent.Type.Resize:
@@ -1632,55 +1710,16 @@ class MainWindow(QMainWindow):
         return w
 
     def _tick_clock(self):
-        self._clock_widget.set_time(time.strftime("%H:%M:%S"), time.strftime("%a %d %b %Y"))
-
-    def _build_left_panel(self) -> QWidget:
-        w = QWidget()
-        w.setMaximumWidth(_LEFT_W)
-        w.setMinimumWidth(self._collapsed_width)
-        w.setStyleSheet(
-            f"background: rgba(4,18,24,0.66); border-right: 1px solid rgba(13,51,71,0.22);"
+        self._clock_widget.set_time(
+            time.strftime("%H:%M:%S"),
+            time.strftime("%a"),
+            time.strftime("%d %b %Y"),
         )
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(6, 10, 6, 10)
-        lay.setSpacing(4)
 
-        # header row with collapse button
-        hdr_row = QHBoxLayout(); hdr_row.setSpacing(4)
-        hdr = QLabel("◈ SYS")
-        hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-        hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; "
-                          f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px;")
-        hdr_row.addWidget(hdr)
-        hdr_row.addStretch()
-        self._left_collapse_btn = QPushButton("❮")
-        self._left_collapse_btn.setFixedSize(18, 18)
-        self._left_collapse_btn.setFont(QFont("Courier New", 7))
-        self._left_collapse_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._left_collapse_btn.setStyleSheet("background: transparent; color: #88ddee; border: none;")
-        self._left_collapse_btn.clicked.connect(self._toggle_left_panel)
-        hdr_row.addWidget(self._left_collapse_btn)
-        lay.addLayout(hdr_row)
-        lay.addSpacing(2)
-
-        self._stat_cpu = CircularStatWidget("CPU", C.PRI)
-        self._stat_mem = CircularStatWidget("RAM", C.ACC2)
-        self._stat_net = CircularStatWidget("NET", C.GREEN)
-        self._stat_gpu = CircularStatWidget("GPU", C.ACC)
-        self._stat_tmp = CircularStatWidget("TMP", "#ff6688")
-        self._stat_up = CircularStatWidget("UP", C.GREEN)
-
-        for stat in [self._stat_cpu, self._stat_mem, self._stat_net,
-                     self._stat_gpu, self._stat_tmp, self._stat_up]:
-            lay.addWidget(stat, 0, Qt.AlignmentFlag.AlignHCenter)
-
-        lay.addStretch()
-
-        return w
     def _build_right_panel(self) -> QWidget:
         w = QWidget()
         w.setMaximumWidth(_RIGHT_W)
-        w.setMinimumWidth(self._collapsed_width)
+        w.setMinimumWidth(48)
         w.setStyleSheet(
             f"background: rgba(6,18,28,0.68); border-left: 1px solid rgba(15,64,96,0.18);"
         )
@@ -1712,14 +1751,6 @@ class MainWindow(QMainWindow):
         lay.addWidget(_sec("COMMAND INPUT"))
         lay.addLayout(self._build_input_row())
 
-        self._mute_btn = QPushButton("🎙  MICROPHONE ACTIVE")
-        self._mute_btn.setFixedHeight(30)
-        self._mute_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
-        self._mute_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._mute_btn.clicked.connect(self._toggle_mute)
-        self._style_mute_btn()
-        lay.addWidget(self._mute_btn)
-
         lay.addSpacing(4)
 
         lay.addWidget(_sec("ACTIVITY LOG"))
@@ -1727,37 +1758,6 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._log, stretch=1)
 
         return w
-
-    def _toggle_left_panel(self):
-        target = 0 if not self._left_collapsed else _LEFT_W
-        if not self._left_collapsed:
-            # collapse to minimal width for icons
-            targ_w = self._collapsed_width
-        else:
-            targ_w = _LEFT_W
-        anim = QPropertyAnimation(self._left_panel, b"maximumWidth", self)
-        anim.setDuration(260)
-        anim.setStartValue(self._left_panel.width())
-        anim.setEndValue(targ_w)
-        anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
-        anim.start()
-        self._left_collapsed = not self._left_collapsed
-        # flip arrow
-        self._left_collapse_btn.setText("❯" if self._left_collapsed else "❮")
-
-    def _toggle_right_panel(self):
-        if not self._right_collapsed:
-            targ_w = self._collapsed_width
-        else:
-            targ_w = _RIGHT_W
-        anim = QPropertyAnimation(self._right_panel, b"maximumWidth", self)
-        anim.setDuration(260)
-        anim.setStartValue(self._right_panel.width())
-        anim.setEndValue(targ_w)
-        anim.setEasingCurve(QEasingCurve.Type.InOutCubic)
-        anim.start()
-        self._right_collapsed = not self._right_collapsed
-        self._right_collapse_btn.setText("❮" if self._right_collapsed else "❯")
 
     def _build_input_row(self) -> QHBoxLayout:
         row = QHBoxLayout(); row.setSpacing(5)
@@ -1850,23 +1850,7 @@ class MainWindow(QMainWindow):
             self._log.append_log("SYS: Microphone active.")
 
     def _style_mute_btn(self):
-        if self._muted:
-            self._mute_btn.setText("🔇  MICROPHONE MUTED")
-            self._mute_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: #140006; color: {C.MUTED_C};
-                    border: 1px solid {C.MUTED_C}; border-radius: 3px;
-                }}
-            """)
-        else:
-            self._mute_btn.setText("🎙  MICROPHONE ACTIVE")
-            self._mute_btn.setStyleSheet(f"""
-                QPushButton {{
-                    background: #00140a; color: {C.GREEN};
-                    border: 1px solid {C.GREEN}; border-radius: 3px;
-                }}
-                QPushButton:hover {{ background: #001f10; }}
-            """)
+        self._mic_btn.set_active(not self._muted)
 
     def _send(self):
         txt = self._input.text().strip()
